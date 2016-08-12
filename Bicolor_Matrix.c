@@ -145,18 +145,28 @@ static const uint8_t FONT8x8[96][8] = {
 		{0x3B,0x6E,0x00,0x00,0x00,0x00,0x00,0x00}, // ~
 		{0x1C,0x36,0x36,0x1C,0x00,0x00,0x00,0x00}};// DEL
 
-int file;
-char filename[20];
-uint8_t i2c_addr;
-uint8_t i2c_bus;
-uint8_t rotation;
-
-uint16_t displaybuffer[8];
-
-uint8_t *bicolor_matrix_rotate_character(char c);
-
-void bicolor_matrix_draw_character(char c, uint8_t font_color, uint8_t background_color)
+enum matrix_state
 {
+	CONNECTED,
+	DISCONNECTED
+};
+
+struct _Matrix
+{
+	int file;
+	uint8_t i2c_addr;
+	uint8_t i2c_bus;
+	uint8_t rotation;
+	uint16_t displaybuffer[8];
+	enum matrix_state state;
+} typedef _Matrix;
+
+
+uint8_t *bicolor_matrix_rotate_character(uint8_t rotation, char c);
+
+void bicolor_matrix_draw_character(Matrix *m, char c, uint8_t font_color, uint8_t background_color)
+{
+	_Matrix *ma = (_Matrix *) m;
 	if(c < 32 || c > 127)
 	{
 		return;
@@ -168,16 +178,16 @@ void bicolor_matrix_draw_character(char c, uint8_t font_color, uint8_t backgroun
 
 	if(background_color == BICOLOR_MATRIX_LED_OFF)
 	{
-		bicolor_matrix_clear();
+		bicolor_matrix_clear(m);
 	}
 	else if(background_color == BICOLOR_MATRIX_LED_RED)
 	{
 		for(int i = 0; i<8; i++)
 		{
 			// Turn on red LED
-			displaybuffer[i] |= 0xFF << 8;
+			ma->displaybuffer[i] |= 0xFF << 8;
 			// Turn off green LED
-			displaybuffer[i] &= 0xFF00;
+			ma->displaybuffer[i] &= 0xFF00;
 		}
 	}
 	else if(background_color == BICOLOR_MATRIX_LED_GREEN)
@@ -185,9 +195,9 @@ void bicolor_matrix_draw_character(char c, uint8_t font_color, uint8_t backgroun
 		for(int i = 0; i<8; i++)
 		{
 			// Turn on green LED
-			displaybuffer[i] |= 0xFF;
+			ma->displaybuffer[i] |= 0xFF;
 			// Turn off red LED
-			displaybuffer[i] &= 0x00FF;
+			ma->displaybuffer[i] &= 0x00FF;
 		}
 	}
 	else if(background_color == BICOLOR_MATRIX_LED_YELLOW)
@@ -195,11 +205,11 @@ void bicolor_matrix_draw_character(char c, uint8_t font_color, uint8_t backgroun
 		for(int i = 0; i<8; i++)
 		{
 			// Turn on green and red LED
-			displaybuffer[i] |= 0xFFFF;
+			ma->displaybuffer[i] |= 0xFFFF;
 		}
 	}
 
-	uint8_t *letter = bicolor_matrix_rotate_character(c);
+	uint8_t *letter = bicolor_matrix_rotate_character(ma->rotation, c);
 
 	if(font_color == BICOLOR_MATRIX_LED_OFF)
 	{
@@ -207,9 +217,9 @@ void bicolor_matrix_draw_character(char c, uint8_t font_color, uint8_t backgroun
 		for(int i = 0; i < 8; i++)
 		{
 			// Trun off green LED
-			displaybuffer[i] &= ~(letter[i]);
+			ma->displaybuffer[i] &= ~(letter[i]);
 			// Turn off red LED
-			displaybuffer[i] &= ~(letter[i] << 8);
+			ma->displaybuffer[i] &= ~(letter[i] << 8);
 		}
 	}
 	else if(font_color == BICOLOR_MATRIX_LED_GREEN)
@@ -217,9 +227,9 @@ void bicolor_matrix_draw_character(char c, uint8_t font_color, uint8_t backgroun
 		for(int i = 0; i < 8; i++)
 		{
 			// Trun on green LED
-			displaybuffer[i] |= letter[i];
+			ma->displaybuffer[i] |= letter[i];
 			// Turn off red LED
-			displaybuffer[i] &= ~(letter[i] << 8);
+			ma->displaybuffer[i] &= ~(letter[i] << 8);
 		}
 	}
 	else if(font_color == BICOLOR_MATRIX_LED_RED)
@@ -227,9 +237,9 @@ void bicolor_matrix_draw_character(char c, uint8_t font_color, uint8_t backgroun
 		for(int i = 0; i < 8; i++)
 		{
 			// Trun on red LED
-			displaybuffer[i] |= letter[i] << 8;
+			ma->displaybuffer[i] |= letter[i] << 8;
 			// Turn off green LED
-			displaybuffer[i] &= ~(letter[i]);
+			ma->displaybuffer[i] &= ~(letter[i]);
 		}
 	}
 	else if(font_color == BICOLOR_MATRIX_LED_YELLOW)
@@ -237,15 +247,15 @@ void bicolor_matrix_draw_character(char c, uint8_t font_color, uint8_t backgroun
 		for(int i = 0; i < 8; i++)
 		{
 			// Trun on green LED
-			displaybuffer[i] |= letter[i] << 8;
+			ma->displaybuffer[i] |= letter[i] << 8;
 			// Turn on red LED
-			displaybuffer[i] |= letter[i];
+			ma->displaybuffer[i] |= letter[i];
 		}
 	}
 	free(letter);
 }
 
-uint8_t *bicolor_matrix_rotate_character(char c)
+uint8_t *bicolor_matrix_rotate_character(uint8_t rotation, char c)
 {
 	uint8_t *out = malloc(8*sizeof(uint8_t));
 	uint8_t index = c - 32;
@@ -294,71 +304,88 @@ uint8_t *bicolor_matrix_rotate_character(char c)
 	}
 }
 
-void bicolor_matrix_init_i2c_connection(uint8_t _addr, uint8_t _bus)
+Matrix *bicolor_matrix_init_i2c_connection(uint8_t _addr, uint8_t _bus)
 {
-	i2c_addr = _addr;
-	i2c_bus = _bus;
+	_Matrix *ma =  malloc(sizeof(_Matrix));
+	ma->state = DISCONNECTED;
+	ma->i2c_addr = _addr;
+	ma->i2c_bus = _bus;
 
-	sprintf(filename, "/dev/i2c-%d", i2c_bus);
-	file = open(filename, O_RDWR);
-	if(file < 0)
+	char filename[20];
+	sprintf(filename, "/dev/i2c-%d", ma->i2c_bus);
+	ma->file = open(filename, O_RDWR);
+	if(ma->file < 0)
 	{
 		fprintf(stderr, "Error: Could not open file `%s': %s\n", filename, strerror(errno));
 		if (errno == EACCES)
 		{
 			fprintf(stderr, "Run as root?\n");
 		}
+		bicolor_matrix_free((Matrix*) ma);
 		exit(1);
 	}
-	if(ioctl(file, I2C_SLAVE, i2c_addr) < 0)
+	if(ioctl(ma->file, I2C_SLAVE, ma->i2c_addr) < 0)
 	{
-		fprintf(stderr, "Error: Could not set address to 0x%02x: %s\n", i2c_addr, strerror(errno));
+		fprintf(stderr, "Error: Could not set address to 0x%02x: %s\n", ma->i2c_addr, strerror(errno));
+		bicolor_matrix_free((Matrix*) ma);
 		exit(1);
 	}
 
-	rotation = 0;
+	ma->rotation = 0;
+	ma->state = CONNECTED;
+	bicolor_matrix_clear((Matrix*) ma);
+	return (Matrix*) ma;
 }
 
-void bicolor_matrix_close_i2c_connection(void)
+void bicolor_matrix_close_i2c_connection(Matrix *m)
 {
-	close(file);
+	_Matrix *ma = (_Matrix *) m;
+	if(ma->state == CONNECTED)
+	{
+		close(ma->file);
+		ma->state = DISCONNECTED;
+	}
 }
 
-void bicolor_matrix_begin(void)
+void bicolor_matrix_begin(Matrix *m)
 {
+	_Matrix *ma = (_Matrix *) m;
 	//turn on oscillator
-	i2c_smbus_write_byte(file, 0x21);
-	bicolor_matrix_blink_rate(BICOLOR_MATRIX_BLINK_OFF);
+	i2c_smbus_write_byte(ma->file, 0x21);
+	bicolor_matrix_blink_rate(m, BICOLOR_MATRIX_BLINK_OFF);
 	// max brightness
-	bicolor_matrix_set_brightness(15);
+	bicolor_matrix_set_brightness(m, 15);
 }
 
-void bicolor_matrix_set_brightness(uint8_t b)
+void bicolor_matrix_set_brightness(Matrix *m, uint8_t b)
 {
+	_Matrix *ma = (_Matrix*) m;
 	if(b > 15)
 	{
 		b = 15;
 	}
-	i2c_smbus_write_byte(file, HT16K33_CMD_BRIGHTNESS | b);
+	i2c_smbus_write_byte(ma->file, HT16K33_CMD_BRIGHTNESS | b);
 }
 
-void bicolor_matrix_blink_rate(uint8_t b)
+void bicolor_matrix_blink_rate(Matrix *m, uint8_t b)
 {
+	_Matrix *ma = (_Matrix*) m;
 	if(b > 3)
 	{
 		// turn off if not sure
 		b = 0;
 	}
-	i2c_smbus_write_byte(file, HT16K33_BLINK_CMD | HT16K33_BLINK_DISPLAYON | ( b << 1));
+	i2c_smbus_write_byte(ma->file, HT16K33_BLINK_CMD | HT16K33_BLINK_DISPLAYON | ( b << 1));
 }
 
-void bicolor_matrix_write_display(void)
+void bicolor_matrix_write_display(Matrix *m)
 {
+	_Matrix *ma = (_Matrix*) m;
 	uint8_t data[16];
 	for(uint8_t i = 0; i<8; i++)
 	{
-		data[2*i] = (uint8_t)(displaybuffer[i] & 0xFF); // Green LED
-		data[2*i+1] = (uint8_t)(displaybuffer[i] >> 8);	// Red LED
+		data[2*i] = (uint8_t)(ma->displaybuffer[i] & 0xFF); // Green LED
+		data[2*i+1] = (uint8_t)(ma->displaybuffer[i] >> 8);	// Red LED
 	}
 	uint8_t data_out[16];
 	for(int i = 0; i < 16; i++)
@@ -366,26 +393,28 @@ void bicolor_matrix_write_display(void)
 		data_out[i] = data[15-i];
 	}
 
-	i2c_smbus_write_i2c_block_data(file, (uint8_t)0x00, 16, data);
+	i2c_smbus_write_i2c_block_data(ma->file, (uint8_t)0x00, 16, data);
 }
 
-void bicolor_matrix_clear(void)
+void bicolor_matrix_clear(Matrix *m)
 {
+	_Matrix *ma = (_Matrix*) m;
 	for(uint8_t i = 0; i < 8; i++)
 	{
-		displaybuffer[i] = 0;
+		ma->displaybuffer[i] = 0;
 	}
 }
 
-void bicolor_matrix_draw_pixel(int16_t x, int16_t y, uint16_t color)
+void bicolor_matrix_draw_pixel(Matrix *m, int16_t x, int16_t y, uint16_t color)
 {
+	_Matrix *ma = (_Matrix*) m;
 	if((y < 0) || (y >= 8)) return;
 	if((x < 0) || (x >= 8)) return;
 
 	color = color % 4;
 
 	int16_t temp;
-	switch(rotation)
+	switch(ma->rotation)
 	{
 		case 1:
 			temp = x;
@@ -406,30 +435,40 @@ void bicolor_matrix_draw_pixel(int16_t x, int16_t y, uint16_t color)
 	}
 	if(color == BICOLOR_MATRIX_LED_GREEN){
 		// Turn on green LED
-		displaybuffer[y] |= 1 << x;
+		ma->displaybuffer[y] |= 1 << x;
 		// Turn off red LED
-		displaybuffer[y] &= ~(1 << (x+8));
+		ma->displaybuffer[y] &= ~(1 << (x+8));
 	}
 	else if( color == BICOLOR_MATRIX_LED_RED)
 	{
 		// Turn on red LED
-		displaybuffer[y] |= (1 << (x+8));
+		ma->displaybuffer[y] |= (1 << (x+8));
 		// Turn off green LED
-		displaybuffer[y] &= ~(1 << x);
+		ma->displaybuffer[y] &= ~(1 << x);
 	}
 	else if(color == BICOLOR_MATRIX_LED_YELLOW)
 	{
 		// Turn on green and red LED
-		displaybuffer[y] |= (1 << (x+8)) | (1 << x);
+		ma->displaybuffer[y] |= (1 << (x+8)) | (1 << x);
 	}
 	else if(color == BICOLOR_MATRIX_LED_OFF)
 	{
 		// Turn off green and red LED
-		displaybuffer[y] &= ~(1 << x) & ~(1 << (x+8));
+		ma->displaybuffer[y] &= ~(1 << x) & ~(1 << (x+8));
 	}
 }
 
-void bicolor_matrix_set_rotation(uint8_t r)
+void bicolor_matrix_set_rotation(Matrix *m, uint8_t r)
 {
-	rotation = r % 4;
+	_Matrix *ma = (_Matrix*) m;
+	ma->rotation = r % 4;
+}
+
+void bicolor_matrix_free(Matrix *m)
+{
+	_Matrix *ma = (_Matrix*) m;
+	if(ma->state == CONNECTED){
+		bicolor_matrix_close_i2c_connection(m);
+	}
+	free(ma);
 }

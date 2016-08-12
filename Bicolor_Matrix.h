@@ -43,57 +43,72 @@
 #define BICOLOR_MATRIX_BLINK_1HZ  2
 #define BICOLOR_MATRIX_BLINK_HALFHZ  3
 
+typedef struct _Matrix *Matrix;
+
 /**
  * @brief Initiate the i2c connection to the matrix.
  *
  * @param _addr i2c address of the matrix
  * @param _bus  i2c bus that the matrix is connected to. Pass 1 if it is connected to /dev/i2c-1, 2 if it is connected to /dev/i2c-2, and so on.
+ *
+ * @return A Matrix pointer that is used in subesquent functions.
  */
-void bicolor_matrix_init_i2c_connection(uint8_t _addr, uint8_t _bus);
+Matrix *bicolor_matrix_init_i2c_connection(uint8_t _addr, uint8_t _bus);
 
 /**
  * @brief Close the i2c connection to the matrix.
+ *
+ * @param m Pointer to the matrix whose connection should be closed
  */
-void bicolor_matrix_close_i2c_connection(void);
+void bicolor_matrix_close_i2c_connection(Matrix *m);
 
 /**
- * @brief Setup the matrix
+ * @brief Set up the matrix
+ *
+ * @param m Pointer to the matrix that should be set up.
  */
-void bicolor_matrix_begin(void);
+void bicolor_matrix_begin(Matrix *m);
 
 /**
  * @brief Set brightness of the matrix.
  *
- * @param Accepts values between 0 and 15 (including these values). If the value is higher than 15 brightness will be set to 15.
+ * @param m Pointer to the matrix whose brightness should be changed.
+ * @param b Brightness. Accepts values between 0 and 15 (including these values). If the value is higher than 15 brightness will be set to 15.
  */
-void bicolor_matrix_set_brightness(uint8_t b);
+void bicolor_matrix_set_brightness(Matrix *m, uint8_t b);
 
 /**
  * @brief Set blink rate
  *
+ * @param m Pointer to the matrix whose blink rate should be changed
  * @param b Blink rate
  *          BICOLOR_MATRIX_BLINK_OFF     No blinking
  *          BICOLOR_MATRIX_BLINK_2HZ     2 Hz
  *          BICOLOR_MATRIX_BLINK_1HZ     1 Hz
  *          BICOLOR_MATRIX_BLINK_HALFHZ  0.5 Hz
  */
-void bicolor_matrix_blink_rate(uint8_t b);
+void bicolor_matrix_blink_rate(Matrix *m, uint8_t b);
 
 /**
  * @brief Write content of the display buffer to the led matrix
+ *
+ * @param m Pointer to the matrix.
  */
-void bicolor_matrix_write_display(void);
+void bicolor_matrix_write_display(Matrix *m);
 
 /**
  * @brief Clear the display buffer.
  *
  * Call bicolor_matrix_write_display() to apply the changes to the matrix.
+ *
+ * @param m Pointer to the matrix.
  */
-void bicolor_matrix_clear(void);
+void bicolor_matrix_clear(Matrix *m);
 
 /**
  * @brief Set a pixel on the display buffer
  *
+ * @param m     Pointer to the matrix.
  * @param x     x-coordinate. Values < 0 or > 7 will be ignored.
  * @param y     y-coordinate. Values < 0 or > 7 will be ignored.
  * @param color Possible values:
@@ -102,7 +117,7 @@ void bicolor_matrix_clear(void);
  *              BICOLOR_MATRIX_LED_YELLOW
  *              BICOLOR_MATRIX_LED_GREEN
  */
-void bicolor_matrix_draw_pixel(int16_t x, int16_t y, uint16_t color);
+void bicolor_matrix_draw_pixel(Matrix *m, int16_t x, int16_t y, uint16_t color);
 
 /**
  * @brief Set rotation of the image
@@ -110,20 +125,31 @@ void bicolor_matrix_draw_pixel(int16_t x, int16_t y, uint16_t color);
  * This will not affect pixels that are already written to the display buffer. If you want to rotate the current image
  * you have to clear the display buffer, call bicolor_matrix_set_rotation and then draw your image again.
  *
+ * @param m Pointer to the matrix.
  * @param r Rotation of the image. Values > 3 will be changed to (r % 4)
  */
-void bicolor_matrix_set_rotation(uint8_t r);
+void bicolor_matrix_set_rotation(Matrix *m, uint8_t r);
 
 /**
  * @brief Write a character to the display buffer.
  *
  * Call bicolor_matrix_write_display() to apply the changes to the matrix.
  *
+ * @param m				   Pointer to the matrix.
  * @param c                Character that should be displayed on the matrix
  * @param font_color       Font color. Possible values: BICOLOR_MATRIX_LED_OFF, BICOLOR_MATRIX_LED_RED, BICOLOR_MATRIX_LED_YELLOW and BICOLOR_MATRIX_LED_GREEN
  * @param background_color Background color. Possible values: BICOLOR_MATRIX_LED_OFF, BICOLOR_MATRIX_LED_RED, BICOLOR_MATRIX_LED_YELLOW and BICOLOR_MATRIX_LED_GREEN
  *
  */
-void bicolor_matrix_draw_character(char c, uint8_t font_color, uint8_t background_color);
+void bicolor_matrix_draw_character(Matrix *m, char c, uint8_t font_color, uint8_t background_color);
+
+/**
+ * @brief Free a matrix struct
+ *
+ * Calling this function closes the i2c connection if it is still open.
+ *
+ * @param m  Pointer to the matrix struct.
+ */
+void bicolor_matrix_free(Matrix *m);
 
 #endif //LEDBACKPACK_BICOLOR_BICOLOR_MATRIX_H

@@ -26,13 +26,14 @@
 #include <stdbool.h>
 #include <time.h>
 
-
+Matrix *m;
 
 void INThandler(int sig)
 {
-	bicolor_matrix_clear();
-	bicolor_matrix_write_display();
-	bicolor_matrix_close_i2c_connection();
+	bicolor_matrix_clear(m);
+	bicolor_matrix_write_display(m);
+	bicolor_matrix_close_i2c_connection(m);
+	bicolor_matrix_free(m);
 	exit(0);
 }
 
@@ -40,21 +41,21 @@ int main(int argc, char *argv[])
 {
 	signal(SIGINT, INThandler);
 
-	bicolor_matrix_init_i2c_connection(0x70, 1);
-	bicolor_matrix_begin();
+	m = bicolor_matrix_init_i2c_connection(0x70, 1);
+	bicolor_matrix_begin(m);
 
 
 	while(true)
 	{
-		bicolor_matrix_clear();
+		bicolor_matrix_clear(m);
 		for (int color = 1; color < 5; color++)
 		{
 			for (int16_t y = 0; y < 8; y++)
 			{
 				for (int16_t x = 0; x < 8; x++)
 				{
-					bicolor_matrix_draw_pixel(x, y, color);
-					bicolor_matrix_write_display();
+					bicolor_matrix_draw_pixel(m, x, y, color);
+					bicolor_matrix_write_display(m);
 
 					nanosleep((const struct timespec[]) {{0, 100000000L}}, NULL);
 
@@ -63,8 +64,8 @@ int main(int argc, char *argv[])
 		}
 		for(int c = 32; c < 128; c++)
 		{
-			bicolor_matrix_draw_character(c, BICOLOR_MATRIX_LED_OFF, BICOLOR_MATRIX_LED_RED);
-			bicolor_matrix_write_display();
+			bicolor_matrix_draw_character(m, c, BICOLOR_MATRIX_LED_OFF, BICOLOR_MATRIX_LED_RED);
+			bicolor_matrix_write_display(m);
 			nanosleep((const struct timespec[]) {{1, 0L}}, NULL);
 		}
 	}
